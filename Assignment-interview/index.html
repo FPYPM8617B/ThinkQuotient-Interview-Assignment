@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        .container {
+  width: 500px;
+  max-width: 500px;
+  margin: 1rem;
+  padding: 2rem;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.2);
+  border-radius: var(--border-radius);
+  background: #ffffff;
+}
+
+
+.form__input-group {
+  margin-bottom: 1rem;
+}
+
+
+.form__input {
+  display: block;
+  width: 100%;
+  padding: 0.75rem;
+  box-sizing: border-box;
+  border-radius: var(--border-radius);
+  border: 1px solid #dddddd;
+  outline: none;
+  background: #eeeeee;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+
+body {
+  --color-primary: #009579;
+  --color-primary-dark: #007f67;
+  --color-secondary: #252c6a;
+  --color-error: #cc3333;
+  --color-success: #4bb544;
+  --border-radius: 4px;
+
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: url(./background.jpg);
+  background-size: cover;
+}
+    </style>
+</head>
+<body>
+    <signup-login></signup-login>
+
+    <script type="module">
+    import { ajax, fixture, StacheElement, type } from "//unpkg.com/can@6/core.mjs";
+    
+    fixture("POST /api/session", function(request, response) {
+        const userData = localStorage.getItem("user");
+        if (userData) {
+            const user = JSON.parse(userData);
+            const requestUser = request.data.user;
+            if (
+                user.email === requestUser.email &&
+                user.password === requestUser.password
+            ) {
+                return request.data;
+            } else {
+                response(401, { message: "Unauthorized" }, {}, "unauthorized");
+            }
+        }
+        response(401, { message: "Unauthorized" }, {}, "unauthorized");
+    });
+    fixture("GET /api/session", function(request, response) {
+        const session = localStorage.getItem("session");
+        if (session) {
+            response(JSON.parse(session));
+        } else {
+            response(404, { message: "No session" }, {}, "unauthorized");
+        }
+    });
+    fixture("DELETE /api/session", function() {
+        localStorage.removeItem("session");
+        return {};
+    });
+    fixture("POST /api/users", function(request) {
+        const session = {
+            user: { email: request.data.email }
+        };
+        localStorage.setItem("user", JSON.stringify(request.data));
+        localStorage.setItem("session", JSON.stringify(session));
+    
+        return session.user;
+    });
+    
+    class SignupLogin extends StacheElement {
+        static view = `
+          {{# if(this.sessionPromise.value) }}
+    
+              <p class="welcome-message">
+                  Welcome {{ this.sessionPromise.value.user.email }}.
+                  <a href="javascript://" on:click="this.logOut()">Log out</a>
+              </p>
+    
+          {{ else }}
+              {{# eq(this.page, "signup") }}
+            <div class="container">
+                  <form on:submit="this.signUp(scope.event)">
+                      <h2>Sign Up</h2>
+                      <div class="form__input-group">
+                      <label for="email">Email-id :</label><br>
+                      <input placeholder="email" class="form__input" value:to="this.email" /><br>
+                     </div>
+
+                     <div class="form__input-group">
+                      <label for="password">Password :</label><br>
+                      <input type="password"
+                               placeholder="password"  class="form__input" value:to="this.password" /><br>
+                      </div>
+                      <button>Sign Up</button>
+    
+                      <aside>
+                          Have an account?
+                          <a href="javascript://" on:click="this.page = 'login'">Log in</a>
+                      </aside>
+                  </form>
+            </div>
+              {{ else }}
+    <div class="container">
+                  <form on:submit="this.logIn(scope.event)">
+                      <h2>Log In</h2>
+
+                      <div class="form__input-group">
+                      <label for="email">Email-id :</label><br>
+                      <input placeholder="email"  class="form__input" value:to="this.email" /><br>
+                     </div
+
+                     <div class="form__input-group">
+                      <label for="password">Password :</label><br>
+                      <input type="password"
+                           placeholder="password"  class="form__input" value:to="this.password" /><br>
+                           
+                      <button>Log In</button>
+                      </div>
+                      {{# if(this.logInError) }}
+                          <div class="error">{{ this.logInError.message }}</div>
+                      {{/ if }}
+    
+                      <aside>
+                          Don’t have an account?
+                          <a href="javascript://" on:click="this.page = 'signup'">Sign up</a>
+                      </aside>
+                  </form>
+    </div>
+              {{/ eq }}
+          {{/ if }}
+        `;
+    
+        static props = {
+            email: String,
+            password: String,
+            page: { type: String, default: "login" },
+            logInError: type.Any,
+            sessionPromise: {
+                get default() {
+                    return ajax({
+                        url: "/api/session"
+                    });
+                }
+            }
+        };
+    
+        signUp(event) {
+            event.preventDefault();
+            this.sessionPromise = ajax({
+                url: "/api/users",
+                type: "post",
+                data: {
+                    email: this.email,
+                    password: this.password
+                }
+            }).then(function(user) {
+                return { user: user };
+            });
+        }
+    
+        logIn(event) {
+            event.preventDefault();
+            this.sessionPromise = ajax({
+                url: "/api/session",
+                type: "post",
+                data: {
+                    user: {
+                        email: this.email,
+                        password: this.password
+                    }
+                }
+            });
+    
+            this.logInError = null;
+            this.sessionPromise.catch(
+                function(error) {
+                    this.logInError = error;
+                }.bind(this)
+            );
+        }
+    
+        logOut() {
+            this.sessionPromise = ajax({
+                url: "/api/session",
+                type: "delete"
+            }).then(function() {
+                return Promise.reject({ message: "Unauthorized" });
+            });
+        }
+    }
+    customElements.define("signup-login", SignupLogin);
+    </script>
+
+
+
+</body>
+</html>
